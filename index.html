@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Site Comparison — Before / After</title>
+<style>
+  :root {
+    --ink: #eae7e0;
+    --dim: rgba(234, 231, 224, 0.55);
+    --line: rgba(234, 231, 224, 0.85);
+    --bg: #0c0d0c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden; overscroll-behavior: none;
+  }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  .side-label {
+    position: fixed; top: 20px; font-size: 13px; letter-spacing: 0.02em;
+    color: var(--dim); pointer-events: none; z-index: 5;
+    transition: opacity 0.2s ease;
+  }
+  #label-before { left: 20px; }
+  #label-after  { right: 20px; text-align: right; }
+
+  #divider {
+    position: fixed; top: 0; bottom: 0; width: 60px; margin-left: -30px;
+    z-index: 6; cursor: ew-resize; touch-action: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #divider::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 50%;
+    width: 1px; background: var(--line); opacity: 0.9;
+    box-shadow: 0 0 12px rgba(0,0,0,0.5);
+  }
+  #handle {
+    position: relative; width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(12,13,12,0.75); border: 1px solid var(--line);
+    backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  }
+  #handle svg { width: 16px; height: 16px; stroke: var(--ink); }
+
+  #hint {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    font-size: 12px; color: var(--dim); text-align: center; z-index: 5;
+    pointer-events: none; transition: opacity 0.6s ease;
+  }
+  #hint b { color: var(--ink); font-weight: 500; }
+
+  #reset-view {
+    position: fixed; bottom: 20px; right: 20px; z-index: 6;
+    background: rgba(12,13,12,0.75); border: 1px solid var(--line); color: var(--ink);
+    font-family: inherit; font-size: 12px; letter-spacing: 0.02em;
+    padding: 8px 14px; border-radius: 20px; cursor: pointer;
+    backdrop-filter: blur(6px); transition: background 0.15s ease, opacity 0.6s ease;
+  }
+  #reset-view:hover { background: rgba(234,231,224,0.12); }
+
+  #loading {
+    position: fixed; inset: 0; z-index: 10; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; transition: opacity 0.5s ease;
+  }
+  #loading .bar { width: 220px; height: 2px; background: rgba(234,231,224,0.15); overflow: hidden; }
+  #loading .bar > div { height: 100%; width: 0%; background: var(--ink); transition: width 0.15s ease; }
+  #loading p { font-size: 13px; color: var(--dim); margin: 0; }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+
+  #error {
+    position: fixed; inset: 0; z-index: 20; background: var(--bg);
+    display: none; align-items: center; justify-content: center; padding: 32px;
+  }
+  #error.show { display: flex; }
+  #error .box { max-width: 480px; font-size: 14px; line-height: 1.6; color: var(--dim); }
+  #error code { color: var(--ink); background: rgba(234,231,224,0.08); padding: 1px 5px; border-radius: 3px; }
+
+  /* ---- transform debug panel (toggle with the "T" key) ---- */
+  #panel {
+    position: fixed; top: 20px; right: 20px; z-index: 30;
+    background: rgba(12,13,12,0.85); border: 1px solid var(--line);
+    backdrop-filter: blur(6px); border-radius: 8px; padding: 14px 16px;
+    font-size: 12px; width: 240px; display: none;
+  }
+  #panel.show { display: block; }
+  #panel h3 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--ink); }
+  #panel label { display: block; margin: 8px 0 2px; color: var(--dim); }
+  #panel .row { display: flex; gap: 4px; }
+  #panel input[type="number"] {
+    width: 100%; background: rgba(234,231,224,0.08); border: 1px solid rgba(234,231,224,0.2);
+    color: var(--ink); border-radius: 4px; padding: 3px 5px; font-size: 11px;
+  }
+  #panel .flip-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+  #panel pre {
+    margin-top: 10px; font-size: 10px; color: var(--dim); white-space: pre-wrap;
+    background: rgba(234,231,224,0.06); padding: 8px; border-radius: 4px; user-select: all;
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<div id="label-before" class="side-label">Before</div>
+<div id="label-after" class="side-label">After</div>
+
+<div id="divider">
+  <div id="handle">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 7l-5 5 5 5M16 7l5 5-5 5" />
+    </svg>
+  </div>
+</div>
+
+<div id="hint">Drag the circle to compare &nbsp;·&nbsp; <b>drag</b> to look around &nbsp;·&nbsp; <b>WASD</b> to move &nbsp;·&nbsp; scroll to zoom &nbsp;·&nbsp; <b>C</b> to save this view as default &nbsp;·&nbsp; <b>T</b> for alignment panel</div>
+
+<button id="reset-view" type="button">Reset view</button>
+
+<div id="loading">
+  <p id="loading-text">Loading before scene…</p>
+  <div class="bar"><div id="loading-bar"></div></div>
+</div>
+
+<div id="error">
+  <div class="box">
+    <p>Couldn't load one of the splat files.</p>
+    <p>Check that <code>splats/before.spz</code> and <code>splats/after.spz</code> exist and that the filenames in <code>index.html</code> match what you uploaded. Open your browser's console for the exact error.</p>
+  </div>
+</div>
+
+<div id="panel">
+  <h3>Alignment (press T to hide)</h3>
+  <label class="flip-row"><input type="checkbox" id="flip-before" checked /> Flip "before" upright</label>
+  <label class="flip-row"><input type="checkbox" id="flip-after" checked /> Flip "after" upright</label>
+  <label>Before — position X / Y / Z</label>
+  <div class="row">
+    <input type="number" id="b-px" step="0.1" value="0" />
+    <input type="number" id="b-py" step="0.1" value="0" />
+    <input type="number" id="b-pz" step="0.1" value="0" />
+  </div>
+  <label>Before — rotation Y (deg)</label>
+  <input type="number" id="b-ry" step="1" value="0" />
+  <label>After — position X / Y / Z</label>
+  <div class="row">
+    <input type="number" id="a-px" step="0.1" value="0" />
+    <input type="number" id="a-py" step="0.1" value="0" />
+    <input type="number" id="a-pz" step="0.1" value="0" />
+  </div>
+  <label>After — rotation Y (deg)</label>
+  <input type="number" id="a-ry" step="1" value="0" />
+  <pre id="panel-output">config will appear here</pre>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/2.1.0/spark.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
+
+/* ------------------------------------------------------------------
+   CONFIG
+------------------------------------------------------------------- */
+const BEFORE_URL = "splats/before.spz";
+const AFTER_URL  = "splats/after.spz";
+
+// Most splat exports (PostShot/COLMAP-style pipelines) come in upside down
+// relative to Three.js's Y-up convention — flipUpright fixes that 180° flip.
+// position is [x,y,z] in meters, rotationY is an EXTRA turn around the
+// vertical axis in degrees, applied after the flip. Use the on-screen panel
+// (press "T") to dial these in live, then copy the printed values back here.
+const BEFORE_TRANSFORM = { flipUpright: true, position: [0, 0, 0], rotationY: 0 };
+const AFTER_TRANSFORM  = { flipUpright: true, position: [0, 0, 0], rotationY: 0 };
+
+// Leave as null to auto-frame the scene on load. To lock in a specific
+// starting angle instead: orbit to the view you want in the browser, press
+// "C" to print the exact camera position/target to the panel, then paste
+// those values in here.
+const INITIAL_CAMERA = null;
+// Example: const INITIAL_CAMERA = { position: [18.2, 9.4, 14.7], target: [2.1, 1.8, -3.0] };
+
+/* ------------------------------------------------------------------ */
+
+const app = document.getElementById("app");
+const loadingEl = document.getElementById("loading");
+const loadingText = document.getElementById("loading-text");
+const loadingBar = document.getElementById("loading-bar");
+const errorEl = document.getElementById("error");
+const hintEl = document.getElementById("hint");
+const dividerEl = document.getElementById("divider");
+const panelEl = document.getElementById("panel");
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 2000);
+camera.position.set(0, 1.6, 4);
+
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+app.appendChild(renderer.domElement);
+
+// Two fully independent scenes — each gets its own SparkRenderer and holds
+// only ONE splat mesh. This is what makes the split actually work: Spark
+// compiles a whole scene's splats into one merged draw per frame, so
+// toggling visibility inside a single shared scene doesn't split cleanly.
+// Two scenes means two clean, independent draws we can scissor separately.
+const sceneBefore = new THREE.Scene();
+const sceneAfter = new THREE.Scene();
+sceneBefore.add(new SparkRenderer({ renderer }));
+sceneAfter.add(new SparkRenderer({ renderer }));
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.rotateSpeed = 0.6;
+controls.panSpeed = 0.6;
+controls.zoomSpeed = 0.8;
+controls.screenSpacePanning = true;
+controls.target.set(0, 1.4, 0);
+// Stop orbiting past level — keeps the camera from swinging under the splat
+// and seeing its (usually messy/undefined) underside.
+controls.maxPolarAngle = THREE.MathUtils.degToRad(89);
+
+// Also used to stop WASD flight from dropping the camera below the splat;
+// set once the scene is framed, once we know how tall it actually is.
+let minCameraY = -Infinity;
+const defaultCameraPos = new THREE.Vector3();
+const defaultCameraTarget = new THREE.Vector3();
+
+// ---- WASD fly-through ----
+const keys = new Set();
+window.addEventListener("keydown", (e) => {
+  if (["KeyW","KeyA","KeyS","KeyD","KeyQ","KeyE","ShiftLeft","ShiftRight"].includes(e.code)) keys.add(e.code);
+  if (e.code === "KeyT") panelEl.classList.toggle("show");
+  if (e.code === "KeyC") captureCurrentView();
+  if (e.code === "KeyR") resetView();
+});
+window.addEventListener("keyup", (e) => keys.delete(e.code));
+
+const forward = new THREE.Vector3();
+const right = new THREE.Vector3();
+const moveDelta = new THREE.Vector3();
+function updateFlyMovement(dt) {
+  if (keys.size === 0) return;
+  const speed = (keys.has("ShiftLeft") || keys.has("ShiftRight") ? 4.5 : 1.8) * dt;
+  camera.getWorldDirection(forward);
+  forward.y = 0; forward.normalize();
+  right.crossVectors(forward, camera.up).normalize();
+
+  moveDelta.set(0, 0, 0);
+  if (keys.has("KeyW")) moveDelta.add(forward);
+  if (keys.has("KeyS")) moveDelta.sub(forward);
+  if (keys.has("KeyD")) moveDelta.add(right);
+  if (keys.has("KeyA")) moveDelta.sub(right);
+  if (keys.has("KeyE")) moveDelta.y += 1;
+  if (keys.has("KeyQ")) moveDelta.y -= 1;
+  if (moveDelta.lengthSq() === 0) return;
+
+  moveDelta.normalize().multiplyScalar(speed);
+  camera.position.add(moveDelta);
+  controls.target.add(moveDelta);
+
+  if (camera.position.y < minCameraY) camera.position.y = minCameraY;
+}
+
+// ---- apply a transform config to a mesh ----
+const FLIP_QUAT = new THREE.Quaternion(1, 0, 0, 0); // 180° around X — the standard splat-export fix
+function applyTransform(mesh, t) {
+  mesh.position.set(t.position[0], t.position[1], t.position[2]);
+  const q = t.flipUpright ? FLIP_QUAT.clone() : new THREE.Quaternion();
+  if (t.rotationY) {
+    const extra = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(t.rotationY));
+    q.multiply(extra);
+  }
+  mesh.quaternion.copy(q);
+}
+
+let beforeMesh, afterMesh;
+let beforeReady = false, afterReady = false;
+
+function setProgress(label, pct) {
+  loadingText.textContent = label;
+  loadingBar.style.width = `${Math.round(pct * 100)}%`;
+}
+function finishLoadingIfReady() {
+  if (beforeReady && afterReady) {
+    frameScene();
+    loadingEl.classList.add("hidden");
+    setTimeout(() => { hintEl.style.opacity = "0"; }, 4000);
+  }
+}
+
+// Fits the camera to however big/small the actual splats turn out to be,
+// and sets a floor height so WASD flight can't dip below the scene.
+function frameScene() {
+  const box = new THREE.Box3();
+  let found = false;
+  for (const mesh of [beforeMesh, afterMesh]) {
+    try {
+      mesh.updateMatrixWorld(true);
+      if (typeof mesh.getBoundingBox !== "function") continue;
+      const localBox = mesh.getBoundingBox();
+      if (!localBox || localBox.isEmpty()) continue;
+      const worldBox = localBox.clone().applyMatrix4(mesh.matrixWorld);
+      box.union(worldBox);
+      found = true;
+    } catch (err) {
+      console.warn("Couldn't read bounding box for auto-framing:", err);
+    }
+  }
+  if (!found || box.isEmpty()) return; // keep the manual default camera position
+
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const radius = Math.max(size.x, size.y, size.z, 0.001) * 0.5;
+
+  controls.minDistance = radius * 0.02;
+  controls.maxDistance = radius * 8;
+  camera.near = Math.max(radius * 0.002, 0.01);
+  camera.far = radius * 60;
+  camera.updateProjectionMatrix();
+  minCameraY = box.min.y + size.y * 0.02;
+
+  if (INITIAL_CAMERA) {
+    camera.position.set(...INITIAL_CAMERA.position);
+    controls.target.set(...INITIAL_CAMERA.target);
+  } else {
+    controls.target.copy(center);
+    camera.position.set(center.x, center.y + radius * 0.5, center.z + radius * 1.4);
+  }
+  controls.update();
+
+  defaultCameraPos.copy(camera.position);
+  defaultCameraTarget.copy(controls.target);
+}
+
+function resetView() {
+  camera.position.copy(defaultCameraPos);
+  controls.target.copy(defaultCameraTarget);
+  controls.update();
+}
+document.getElementById("reset-view").addEventListener("click", resetView);
+
+beforeMesh = new SplatMesh({
+  url: BEFORE_URL,
+  onLoad: () => { beforeReady = true; finishLoadingIfReady(); },
+  onProgress: (r) => setProgress("Loading before scene…", r),
+});
+applyTransform(beforeMesh, BEFORE_TRANSFORM);
+sceneBefore.add(beforeMesh);
+
+afterMesh = new SplatMesh({
+  url: AFTER_URL,
+  onLoad: () => { afterReady = true; finishLoadingIfReady(); },
+  onProgress: (r) => setProgress("Loading after scene…", r),
+});
+applyTransform(afterMesh, AFTER_TRANSFORM);
+sceneAfter.add(afterMesh);
+
+window.addEventListener("unhandledrejection", (e) => {
+  console.error(e.reason);
+  errorEl.classList.add("show");
+});
+
+// ---- alignment panel wiring ----
+const panelIds = {
+  flipBefore: "flip-before", flipAfter: "flip-after",
+  bpx: "b-px", bpy: "b-py", bpz: "b-pz", bry: "b-ry",
+  apx: "a-px", apy: "a-py", apz: "a-pz", ary: "a-ry",
+};
+const el = Object.fromEntries(Object.entries(panelIds).map(([k, id]) => [k, document.getElementById(id)]));
+const panelOutput = document.getElementById("panel-output");
+
+function syncPanelInputsFromConfig() {
+  el.flipBefore.checked = BEFORE_TRANSFORM.flipUpright;
+  el.flipAfter.checked = AFTER_TRANSFORM.flipUpright;
+  el.bpx.value = BEFORE_TRANSFORM.position[0]; el.bpy.value = BEFORE_TRANSFORM.position[1]; el.bpz.value = BEFORE_TRANSFORM.position[2];
+  el.bry.value = BEFORE_TRANSFORM.rotationY;
+  el.apx.value = AFTER_TRANSFORM.position[0]; el.apy.value = AFTER_TRANSFORM.position[1]; el.apz.value = AFTER_TRANSFORM.position[2];
+  el.ary.value = AFTER_TRANSFORM.rotationY;
+}
+syncPanelInputsFromConfig();
+
+function onPanelChange() {
+  BEFORE_TRANSFORM.flipUpright = el.flipBefore.checked;
+  AFTER_TRANSFORM.flipUpright = el.flipAfter.checked;
+  BEFORE_TRANSFORM.position = [parseFloat(el.bpx.value) || 0, parseFloat(el.bpy.value) || 0, parseFloat(el.bpz.value) || 0];
+  BEFORE_TRANSFORM.rotationY = parseFloat(el.bry.value) || 0;
+  AFTER_TRANSFORM.position = [parseFloat(el.apx.value) || 0, parseFloat(el.apy.value) || 0, parseFloat(el.apz.value) || 0];
+  AFTER_TRANSFORM.rotationY = parseFloat(el.ary.value) || 0;
+
+  applyTransform(beforeMesh, BEFORE_TRANSFORM);
+  applyTransform(afterMesh, AFTER_TRANSFORM);
+
+  panelOutput.textContent =
+`const BEFORE_TRANSFORM = ${JSON.stringify(BEFORE_TRANSFORM)};
+const AFTER_TRANSFORM  = ${JSON.stringify(AFTER_TRANSFORM)};`;
+}
+Object.values(el).forEach((input) => input.addEventListener("input", onPanelChange));
+onPanelChange();
+
+function captureCurrentView() {
+  panelEl.classList.add("show");
+  const p = camera.position, t = controls.target;
+  const round = (n) => Math.round(n * 100) / 100;
+  panelOutput.textContent =
+`const INITIAL_CAMERA = {
+  position: [${round(p.x)}, ${round(p.y)}, ${round(p.z)}],
+  target: [${round(t.x)}, ${round(t.y)}, ${round(t.z)}]
+};
+// paste this near the top of index.html, replacing the existing
+// "const INITIAL_CAMERA = ..." line`;
+}
+
+// ---- draggable before/after divider ----
+let splitFrac = 0.5;
+function positionDivider() {
+  dividerEl.style.left = `${splitFrac * window.innerWidth}px`;
+}
+positionDivider();
+
+let dragging = false;
+dividerEl.addEventListener("pointerdown", (e) => {
+  dragging = true;
+  dividerEl.setPointerCapture(e.pointerId);
+});
+dividerEl.addEventListener("pointermove", (e) => {
+  if (!dragging) return;
+  splitFrac = Math.min(1, Math.max(0, e.clientX / window.innerWidth));
+  positionDivider();
+});
+dividerEl.addEventListener("pointerup", (e) => {
+  dragging = false;
+  dividerEl.releasePointerCapture(e.pointerId);
+});
+
+// ---- resize ----
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  positionDivider();
+}
+window.addEventListener("resize", onResize);
+
+// ---- render loop: same camera, two independent scenes, scissored side by side ----
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  updateFlyMovement(dt);
+  controls.update();
+
+  const w = window.innerWidth, h = window.innerHeight;
+  const splitX = Math.round(splitFrac * w);
+
+  renderer.setScissorTest(true);
+
+  if (splitX > 0) {
+    renderer.setViewport(0, 0, w, h);
+    renderer.setScissor(0, 0, splitX, h);
+    renderer.render(sceneBefore, camera);
+  }
+  if (splitX < w) {
+    renderer.setViewport(0, 0, w, h);
+    renderer.setScissor(splitX, 0, w - splitX, h);
+    renderer.render(sceneAfter, camera);
+  }
+
+  renderer.setScissorTest(false);
+}
+animate();
+</script>
+</body>
+</html>
