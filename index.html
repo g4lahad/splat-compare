@@ -191,7 +191,12 @@ const AFTER_TRANSFORM  = { flipUpright: true, position: [0, 0, 0], rotationY: 0 
 // starting angle instead: orbit to the view you want in the browser, press
 // "C" to print the exact camera position/target to the panel, then paste
 // those values in here.
-const INITIAL_CAMERA = null;
+const INITIAL_CAMERA = {
+  position: [0.42, 0.29, 0.41],
+  target: [-0.02, -0.22, -0.33]
+};
+// paste this near the top of index.html, replacing the existing
+// "const INITIAL_CAMERA = ..." line
 // Example: const INITIAL_CAMERA = { position: [18.2, 9.4, 14.7], target: [2.1, 1.8, -3.0] };
 
 /* ------------------------------------------------------------------ */
